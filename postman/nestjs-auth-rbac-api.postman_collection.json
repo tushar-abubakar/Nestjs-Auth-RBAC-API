@@ -1,0 +1,447 @@
+{
+  "info": {
+    "name": "Advanced Auth API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Full API collection for Advanced Auth backend (NestJS)"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000", "type": "string" },
+    { "key": "accessToken", "value": "", "type": "string" },
+    { "key": "refreshToken", "value": "", "type": "string" },
+    { "key": "verificationToken", "value": "", "type": "string" },
+    { "key": "twoFactorToken", "value": "", "type": "string" },
+    { "key": "resetVerificationToken", "value": "", "type": "string" },
+    { "key": "resetToken", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET / — Health Check",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/", "host": ["{{baseUrl}}"], "path": [""] },
+            "description": "Basic health check endpoint."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — Registration",
+      "item": [
+        {
+          "name": "POST /auth/register",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.verificationToken) {",
+                  "  pm.collectionVariables.set('verificationToken', res.verificationToken);",
+                  "}",
+                  "if (res.tokens?.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.tokens.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', res.tokens.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"username\": \"johndoe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"Password@123\"\n}"
+            },
+            "description": "Creates a new user account. Returns EMAIL_VERIFICATION challenge (with verificationToken) or AUTHENTICATED tokens if email verification is disabled."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — Email Verification",
+      "item": [
+        {
+          "name": "POST /auth/email/verify-otp",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.tokens?.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.tokens.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', res.tokens.refreshToken);",
+                  "}",
+                  "if (res.twoFactorToken) {",
+                  "  pm.collectionVariables.set('twoFactorToken', res.twoFactorToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{verificationToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/email/verify-otp", "host": ["{{baseUrl}}"], "path": ["auth", "email", "verify-otp"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            },
+            "description": "Verifies email using 6-digit OTP. Requires EMAIL_VERIFICATION bearer token (verificationToken). Returns AUTHENTICATED tokens or TWO_FACTOR_REQUIRED challenge."
+          }
+        },
+        {
+          "name": "GET /auth/email/verify-link",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/auth/email/verify-link?token={{verificationToken}}&code=123456",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "email", "verify-link"],
+              "query": [
+                { "key": "token", "value": "{{verificationToken}}" },
+                { "key": "code", "value": "123456" }
+              ]
+            },
+            "description": "Verifies email via magic link. No JWT — uses urlToken query param as credential."
+          }
+        },
+        {
+          "name": "POST /auth/email/resend-otp",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{verificationToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/email/resend-otp", "host": ["{{baseUrl}}"], "path": ["auth", "email", "resend-otp"] },
+            "description": "Resends email verification OTP. Requires EMAIL_VERIFICATION bearer token. Subject to rate limiting and exponential backoff."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — Login & 2FA",
+      "item": [
+        {
+          "name": "POST /auth/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.tokens?.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.tokens.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', res.tokens.refreshToken);",
+                  "}",
+                  "if (res.twoFactorToken) {",
+                  "  pm.collectionVariables.set('twoFactorToken', res.twoFactorToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailOrUsername\": \"john@example.com\",\n  \"password\": \"Password@123\",\n  \"remember\": false\n}"
+            },
+            "description": "Login with email/username + password. Returns AUTHENTICATED tokens, TWO_FACTOR_REQUIRED challenge, or throws if account is inactive/unverified."
+          }
+        },
+        {
+          "name": "POST /auth/two-factor/verify",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.tokens?.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.tokens.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', res.tokens.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{twoFactorToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/two-factor/verify", "host": ["{{baseUrl}}"], "path": ["auth", "two-factor", "verify"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            },
+            "description": "Completes 2FA login step. Requires TWO_FACTOR bearer token. Returns AUTHENTICATED session tokens on success."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — Session",
+      "item": [
+        {
+          "name": "POST /auth/token/refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.tokens?.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.tokens.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', res.tokens.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/token/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "token", "refresh"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "description": "Rotates refresh token. Old token is invalidated and a fresh access + refresh token pair is issued."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth — Password Reset",
+      "item": [
+        {
+          "name": "1. POST /auth/password/forgot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.verificationToken) {",
+                  "  pm.collectionVariables.set('resetVerificationToken', res.verificationToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/password/forgot", "host": ["{{baseUrl}}"], "path": ["auth", "password", "forgot"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emailOrUsername\": \"john@example.com\"\n}"
+            },
+            "description": "Step 1 — Initiates password reset. Sends 6-digit OTP + magic link. Always returns a verificationToken (even for non-existent users to prevent enumeration)."
+          }
+        },
+        {
+          "name": "1b. POST /auth/password/resend-otp",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{resetVerificationToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/password/resend-otp", "host": ["{{baseUrl}}"], "path": ["auth", "password", "resend-otp"] },
+            "description": "Step 1 (resend) — Resends password reset OTP. Requires PASSWORD_RESET_VERIFICATION bearer token."
+          }
+        },
+        {
+          "name": "2a. POST /auth/password/verify-otp",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.resetToken) {",
+                  "  pm.collectionVariables.set('resetToken', res.resetToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{resetVerificationToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/password/verify-otp", "host": ["{{baseUrl}}"], "path": ["auth", "password", "verify-otp"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            },
+            "description": "Step 2a — Verify OTP manually. Requires PASSWORD_RESET_VERIFICATION bearer token. Returns short-lived resetToken (10 min)."
+          }
+        },
+        {
+          "name": "2b. GET /auth/password/verify-link",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.resetToken) {",
+                  "  pm.collectionVariables.set('resetToken', res.resetToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/auth/password/verify-link?token={{resetVerificationToken}}&code=123456",
+              "host": ["{{baseUrl}}"],
+              "path": ["auth", "password", "verify-link"],
+              "query": [
+                { "key": "token", "value": "{{resetVerificationToken}}" },
+                { "key": "code", "value": "123456" }
+              ]
+            },
+            "description": "Step 2b — Verify via magic link click. No JWT — uses urlToken query param. Returns resetToken."
+          }
+        },
+        {
+          "name": "3. POST /auth/password/reset",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "if (res.tokens?.accessToken) {",
+                  "  pm.collectionVariables.set('accessToken', res.tokens.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', res.tokens.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{resetToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/password/reset", "host": ["{{baseUrl}}"], "path": ["auth", "password", "reset"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"newPassword\": \"NewPassword@456\",\n  \"deleteOtherSessions\": true\n}"
+            },
+            "description": "Step 3 — Sets new password. Requires PASSWORD_RESET bearer token. Returns AUTHENTICATED tokens or TWO_FACTOR_REQUIRED challenge."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Two-Factor (2FA)",
+      "item": [
+        {
+          "name": "GET /two-factor/setup",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/two-factor/setup", "host": ["{{baseUrl}}"], "path": ["two-factor", "setup"] },
+            "description": "Initiates 2FA setup. Returns secret and QR code (base64 PNG). Requires 2fa:manage permission."
+          }
+        },
+        {
+          "name": "POST /two-factor/enable",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/two-factor/enable", "host": ["{{baseUrl}}"], "path": ["two-factor", "enable"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            },
+            "description": "Enables 2FA. Verify TOTP code from authenticator app after /setup. Returns backup codes. Requires 2fa:manage permission."
+          }
+        },
+        {
+          "name": "DELETE /two-factor/disable",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/two-factor/disable", "host": ["{{baseUrl}}"], "path": ["two-factor", "disable"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            },
+            "description": "Disables 2FA. Requires active 2FA and valid TOTP code. Requires 2fa:manage permission."
+          }
+        },
+        {
+          "name": "POST /two-factor/regenerate-backup-codes",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/two-factor/regenerate-backup-codes", "host": ["{{baseUrl}}"], "path": ["two-factor", "regenerate-backup-codes"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"123456\"\n}"
+            },
+            "description": "Regenerates 2FA backup codes. Old codes are invalidated. Requires 2fa:manage permission."
+          }
+        },
+        {
+          "name": "GET /two-factor/backup-codes-count",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/two-factor/backup-codes-count", "host": ["{{baseUrl}}"], "path": ["two-factor", "backup-codes-count"] },
+            "description": "Returns the count of remaining backup codes. Requires 2fa:manage permission."
+          }
+        },
+        {
+          "name": "GET /two-factor/status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/two-factor/status", "host": ["{{baseUrl}}"], "path": ["two-factor", "status"] },
+            "description": "Returns 2FA enabled status and remaining backup codes count. Requires 2fa:manage permission."
+          }
+        }
+      ]
+    }
+  ]
+}

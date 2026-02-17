@@ -1,0 +1,77 @@
+{
+  "REQUIRED": "{property} is required",
+  "NOT_EMPTY": "{property} is required",
+  "DEFINED": "{property} is required",
+
+  "STRING": "{property} must be text",
+  "NUMBER": "{property} must be a number",
+  "INT": "{property} must be a whole number",
+  "BOOLEAN": "{property} must be true or false",
+  "ARRAY": "{property} must be a list",
+  "OBJECT": "{property} must be a valid object",
+
+  "EMAIL": "Enter a valid {property}",
+  "URL": "Enter a valid {property}",
+  "UUID": "{property} has an invalid format",
+  "IP": "{property} is not a valid IP address",
+  "MAC": "{property} is not a valid MAC address",
+  "JWT": "{property} is invalid",
+
+  "ALPHA": "{property} can only contain letters",
+  "ALPHANUMERIC": "{property} can only contain letters and numbers",
+  "ASCII": "{property} contains invalid characters",
+  "BASE64": "{property} must be valid base64",
+  "HEX": "{property} must be valid hexadecimal",
+  "UPPERCASE": "{property} must be uppercase",
+  "LOWERCASE": "{property} must be lowercase",
+
+  "MATCHES": "{property} format is invalid",
+  "CONTAINS": "{property} must include '{constraints.0}'",
+  "NOT_CONTAINS": "{property} cannot include '{constraints.0}'",
+
+  "MIN_LENGTH": "{property} must be at least {constraints.0} characters",
+  "MAX_LENGTH": "{property} must be no more than {constraints.0} characters",
+  "LENGTH": "{property} must be between {constraints.0} and {constraints.1} characters",
+
+  "MIN": "{property} is too small",
+  "MAX": "{property} is too large",
+  "POSITIVE": "{property} must be positive",
+  "NEGATIVE": "{property} must be negative",
+  "DIVISIBLE_BY": "{property} is invalid",
+
+  "DATE": "{property} must be a valid date",
+  "DATE_STRING": "{property} must be a valid date",
+  "MIN_DATE": "{property} is too early",
+  "MAX_DATE": "{property} is too late",
+
+  "ENUM": "Select a valid {property}",
+
+  "ARRAY_NOT_EMPTY": "{property} cannot be empty",
+  "ARRAY_MIN_SIZE": "{property} must have at least {constraints.0} items",
+  "ARRAY_MAX_SIZE": "{property} has too many items",
+  "ARRAY_UNIQUE": "{property} contains duplicate values",
+
+  "NESTED": "{property} contains invalid values",
+  "CONDITIONAL": "{property} is invalid",
+
+  "LATITUDE": "{property} must be a valid latitude",
+  "LONGITUDE": "{property} must be a valid longitude",
+
+  "JSON": "{property} must be valid JSON",
+  "PORT": "{property} must be a valid port number",
+
+  "PHONE_NUMBER": "Enter a valid {property}",
+  "POSTAL_CODE": "Enter a valid {property}",
+
+  "CREDIT_CARD": "{property} is not a valid card number",
+  "ISBN": "{property} is not a valid ISBN",
+  "ISSN": "{property} is not a valid ISSN",
+
+  "PASSWORD_WEAK": "{property} must be at least 8 characters long and include uppercase letters, lowercase letters, numbers, and special characters.",
+  "PASSWORD_STRONG": "{property} should include letters, numbers, or symbols",
+
+  "USERNAME_FORMAT": "Invalid {property} format. It must start with a letter, and contain only letters, numbers, dots, or underscores.",
+  "USERNAME_TAKEN": "This {property} is not available",
+
+  "CODE_INVALID": "{property} must be a 6-digit code"
+}

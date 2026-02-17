@@ -1,0 +1,12 @@
+{
+  "duration": {
+    "day": "{count} day",
+    "days": "{count} days",
+    "hour": "{count} hour",
+    "hours": "{count} hours",
+    "minute": "{count} minute",
+    "minutes": "{count} minutes",
+    "second": "{count} second",
+    "seconds": "{count} seconds"
+  }
+}
