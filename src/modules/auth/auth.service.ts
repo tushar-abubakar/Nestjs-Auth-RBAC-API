@@ -78,7 +78,7 @@ export class AuthService {
     userAgent: string,
     ipAddress: string,
   ): Promise<AuthResponse> {
-    const { name, username, email, password } = dto;
+    const { firstName, lastName, username, email, password } = dto;
 
     const existingEmail = await this.prisma.user.findUnique({
       where: { email },
@@ -118,25 +118,25 @@ export class AuthService {
     const requireEmailVerification = true;
     const user = await this.prisma.user.create({
       data: {
-        name,
+        firstName,
+        lastName,
         username: finalUsername,
         email,
         password: await hash(password),
         roleId: userRole.id,
         isEmailVerified: !requireEmailVerification,
-        preferences: { create: {} },
       },
-      include: { preferences: true },
     });
 
     if (!user.isEmailVerified) {
-      const urlToken = this.generateUrlToken();
+      const flowSecret = this.generateFlowSecret();
+
       const { otp } = await this.createVerificationCode(
         user.id,
         VerificationType.EMAIL_VERIFICATION,
         1,
         1440,
-        urlToken,
+        flowSecret,
       );
 
       const {
@@ -151,9 +151,9 @@ export class AuthService {
       await this.dispatchMail(
         VerificationType.EMAIL_VERIFICATION,
         user.email,
-        user.name,
+        `${user.firstName} ${user.lastName}`,
         otp,
-        urlToken,
+        flowSecret,
       );
 
       const { waitSeconds: retryAfterSeconds } = this.calcRetryDelay(
@@ -223,7 +223,6 @@ export class AuthService {
     const email = dto.emailOrUsername.toLowerCase();
     const user = await this.prisma.user.findFirst({
       where: { OR: [{ email }, { username: dto.emailOrUsername }] },
-      include: { preferences: true },
     });
 
     if (!user) {
@@ -258,7 +257,7 @@ export class AuthService {
     return this.buildAuthResponse(
       user.id,
       user.email,
-      user.preferences,
+      { enable2FA: user.enable2FA, twoFactorSecret: user.twoFactorSecret },
       userAgent,
       ipAddress,
       dto.remember ?? false,
@@ -282,10 +281,7 @@ export class AuthService {
     userAgent: string,
     ipAddress: string,
   ): Promise<AuthResponse> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { preferences: true },
-    });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user || !user.isActive) {
       throw new BadRequestException(
@@ -313,7 +309,7 @@ export class AuthService {
     return this.buildAuthResponse(
       user.id,
       user.email,
-      user.preferences,
+      { enable2FA: user.enable2FA, twoFactorSecret: user.twoFactorSecret },
       userAgent,
       ipAddress,
       false,
@@ -337,18 +333,18 @@ export class AuthService {
    * @throws UnauthorizedException  Account inactive.
    */
   async verifyEmailLinkAndLogin(
-    urlToken: string,
+    flowSecret: string,
     code: string,
     userAgent: string,
     ipAddress: string,
   ): Promise<AuthResponse> {
-    if (!urlToken || !code) {
+    if (!flowSecret || !code) {
       throw new BadRequestException(
         this.i18n.translate('auth.errors.missingTokenOrCode'),
       );
     }
 
-    const tokenRateKey = `verify-link:attempts:token:${urlToken}`;
+    const tokenRateKey = `verify-link:attempts:token:${flowSecret}`;
     const ipRateKey = `verify-link:attempts:ip:${ipAddress}`;
     const windowSeconds = 900; // 15 min
 
@@ -376,16 +372,18 @@ export class AuthService {
     }
 
     const record = await this.prisma.verificationCode.findUnique({
-      where: { urlToken },
+      where: { flowSecret },
       include: {
         user: {
           select: {
             id: true,
             email: true,
-            name: true,
+            firstName: true,
+            lastName: true,
             isActive: true,
             isEmailVerified: true,
-            preferences: { select: { enable2FA: true, twoFactorSecret: true } },
+            enable2FA: true,
+            twoFactorSecret: true,
           },
         },
       },
@@ -449,7 +447,7 @@ export class AuthService {
     return this.buildAuthResponse(
       user.id,
       user.email,
-      user.preferences,
+      { enable2FA: user.enable2FA, twoFactorSecret: user.twoFactorSecret },
       userAgent,
       ipAddress,
       false,
@@ -473,16 +471,9 @@ export class AuthService {
     userAgent: string,
     remember: boolean = false,
   ): Promise<AuthResponse> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { preferences: true },
-    });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
-    if (
-      !user ||
-      !user.preferences?.enable2FA ||
-      !user.preferences.twoFactorSecret
-    ) {
+    if (!user || !user.enable2FA || !user.twoFactorSecret) {
       throw new BadRequestException(
         this.i18n.translate('auth.errors.invalid2faCode'),
       );
@@ -490,7 +481,7 @@ export class AuthService {
 
     const isValid = this.twoFactorService.verifyToken(
       dto.code,
-      user.preferences.twoFactorSecret,
+      user.twoFactorSecret,
     );
 
     if (!isValid) {
@@ -498,6 +489,11 @@ export class AuthService {
         this.i18n.translate('auth.errors.invalid2faCode'),
       );
     }
+
+    // Delete the TWO_FACTOR_AUTH VerificationCode row
+    await this.prisma.verificationCode.deleteMany({
+      where: { userId: user.id, type: VerificationType.TWO_FACTOR_AUTH },
+    });
 
     return this.buildAuthResponse(
       user.id,
@@ -672,9 +668,9 @@ export class AuthService {
       );
     }
 
-    await this.applyEmailRateLimits(userId, ipAddress, 'PASSWORD_RESET');
-
     const result = await this.dispatchPasswordResetCode(user);
+
+    await this.applyEmailRateLimits(userId, ipAddress, 'PASSWORD_RESET');
 
     return { ...result, message: genericMessage };
   }
@@ -718,12 +714,6 @@ export class AuthService {
       );
     }
 
-    await this.applyEmailRateLimits(
-      userId,
-      ipAddress,
-      VerificationType.EMAIL_VERIFICATION,
-    );
-
     const { nextAttemptCount, dailyMaxAttempts } =
       await this.resolveResendAttemptCount(
         userId,
@@ -731,21 +721,28 @@ export class AuthService {
         7,
       );
 
-    const urlToken = this.generateUrlToken();
+    await this.applyEmailRateLimits(
+      userId,
+      ipAddress,
+      VerificationType.EMAIL_VERIFICATION,
+    );
+
+    const flowSecret = this.generateFlowSecret();
+
     const { otp } = await this.createVerificationCode(
       user.id,
       VerificationType.EMAIL_VERIFICATION,
       nextAttemptCount,
       1440,
-      urlToken,
+      flowSecret,
     );
 
     await this.dispatchMail(
       VerificationType.EMAIL_VERIFICATION,
       user.email,
-      user.name,
+      `${user.firstName} ${user.lastName}`,
       otp,
-      urlToken,
+      flowSecret,
     );
 
     const { waitSeconds: nextRetryIn } = this.calcRetryDelay(
@@ -774,7 +771,7 @@ export class AuthService {
   async verifyPasswordResetOtp(
     dto: VerifyResetCodeDto,
     userId: string,
-    secret: string,
+    flowSecret: string,
     isFakeUser: boolean = false,
   ): Promise<VerifyResetResponse> {
     if (isFakeUser) {
@@ -793,24 +790,15 @@ export class AuthService {
       );
     }
 
-    if (!user.passwordResetSecret || user.passwordResetSecret !== secret) {
-      this.logger.warn(
-        `verifyPasswordResetOtp: stale secret for user ${userId} — token was invalidated`,
-      );
-      throw new UnauthorizedException(
-        this.i18n.translate('auth.errors.resetTokenInvalidated'),
-      );
-    }
-
     const record = await this.prisma.verificationCode.findUnique({
       where: {
         userId_type: { userId: user.id, type: VerificationType.PASSWORD_RESET },
       },
     });
 
-    if (!record) {
+    if (!record || record.flowSecret !== flowSecret) {
       throw new BadRequestException(
-        this.i18n.translate('auth.errors.invalidResetCode'),
+        this.i18n.translate('auth.errors.resetTokenInvalidated'),
       );
     }
 
@@ -842,25 +830,20 @@ export class AuthService {
    * @throws UnauthorizedException  Account inactive.
    */
   async verifyPasswordResetLink(
-    urlToken: string,
+    flowSecret: string,
     code: string,
   ): Promise<VerifyResetResponse> {
-    if (!urlToken || !code) {
+    if (!flowSecret || !code) {
       throw new BadRequestException(
         this.i18n.translate('auth.errors.missingTokenOrCode'),
       );
     }
 
     const record = await this.prisma.verificationCode.findUnique({
-      where: { urlToken },
+      where: { flowSecret },
       include: {
         user: {
-          select: {
-            id: true,
-            email: true,
-            isActive: true,
-            passwordResetSecret: true,
-          },
+          select: { id: true, email: true, isActive: true },
         },
       },
     });
@@ -910,14 +893,11 @@ export class AuthService {
   async resetPassword(
     dto: SetNewPasswordDto,
     userId: string,
-    secret: string,
+    flowSecret: string,
     userAgent: string,
     ipAddress: string,
   ): Promise<AuthResponse> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { preferences: true },
-    });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
     if (!user || !user.isActive) {
       throw new UnauthorizedException(
@@ -925,7 +905,13 @@ export class AuthService {
       );
     }
 
-    if (!user.passwordResetSecret || user.passwordResetSecret !== secret) {
+    const record = await this.prisma.verificationCode.findUnique({
+      where: {
+        userId_type: { userId: user.id, type: VerificationType.PASSWORD_RESET },
+      },
+    });
+
+    if (!record || record.flowSecret !== flowSecret) {
       throw new UnauthorizedException(
         this.i18n.translate('auth.errors.resetTokenInvalidated'),
       );
@@ -936,7 +922,6 @@ export class AuthService {
         where: { id: user.id },
         data: {
           password: await hash(dto.newPassword),
-          passwordResetSecret: null,
           isEmailVerified: true,
         },
       });
@@ -973,7 +958,7 @@ export class AuthService {
     return this.buildAuthResponse(
       user.id,
       user.email,
-      user.preferences,
+      { enable2FA: user.enable2FA, twoFactorSecret: user.twoFactorSecret },
       userAgent,
       ipAddress,
       false,
@@ -1009,9 +994,37 @@ export class AuthService {
       const expiry =
         this.config.get<StringValue>('jwt.twoFactorExpiresIn') || '10m';
 
+      const flowSecret = this.generateFlowSecret();
+
+      // Upsert a TWO_FACTOR_AUTH row so FlowGuard can validate the flowSecret
+      await this.prisma.verificationCode.upsert({
+        where: {
+          userId_type: { userId, type: VerificationType.TWO_FACTOR_AUTH },
+        },
+        create: {
+          userId,
+          type: VerificationType.TWO_FACTOR_AUTH,
+          code: '',
+          flowSecret,
+          attempts: 0,
+          lastSentAt: new Date(),
+          expiresAt: new Date(Date.now() + ms(expiry)),
+        },
+        update: {
+          flowSecret,
+          expiresAt: new Date(Date.now() + ms(expiry)),
+        },
+      });
+
       const { token: twoFactorToken, expiresAt: twoFactorTokenExpiresAt } =
         this.signTokenWithExpiry(
-          { sub: userId, email, type: TokenType.TWO_FACTOR, remember },
+          {
+            sub: userId,
+            email,
+            type: TokenType.TWO_FACTOR,
+            remember,
+            flowSecret,
+          },
           expiry,
         );
 
@@ -1066,15 +1079,33 @@ export class AuthService {
   private async rotateResetSecretAndIssueToken(
     userId: string,
     email: string,
-    recordId: string,
+    verifyRecordId: string,
   ): Promise<VerifyResetResponse> {
-    const newSecret = this.generateResetSecret();
+    const newFlowSecret = this.generateFlowSecret();
+    const resetExpiry = '10m';
 
     await this.prisma.$transaction(async (tx) => {
-      await tx.verificationCode.delete({ where: { id: recordId } });
-      await tx.user.update({
-        where: { id: userId },
-        data: { passwordResetSecret: newSecret },
+      // Remove the OTP record — kills the PASSWORD_RESET_VERIFICATION JWT.
+      await tx.verificationCode.delete({ where: { id: verifyRecordId } });
+
+      // Create the PASSWORD_RESET row that backs the new reset token.
+      await tx.verificationCode.upsert({
+        where: {
+          userId_type: { userId, type: VerificationType.PASSWORD_RESET },
+        },
+        create: {
+          userId,
+          type: VerificationType.PASSWORD_RESET,
+          code: '',
+          flowSecret: newFlowSecret,
+          attempts: 0,
+          lastSentAt: new Date(),
+          expiresAt: new Date(Date.now() + ms(resetExpiry)),
+        },
+        update: {
+          flowSecret: newFlowSecret,
+          expiresAt: new Date(Date.now() + ms(resetExpiry)),
+        },
       });
     });
 
@@ -1084,7 +1115,7 @@ export class AuthService {
           sub: userId,
           email,
           type: TokenType.PASSWORD_RESET,
-          secret: newSecret,
+          flowSecret: newFlowSecret,
         },
         '10m',
       );
@@ -1219,7 +1250,8 @@ export class AuthService {
   private async dispatchPasswordResetCode(user: {
     id: string;
     email: string;
-    name: string;
+    firstName: string;
+    lastName: string;
   }): Promise<{
     verificationToken: string;
     verificationTokenExpiresAt: string;
@@ -1277,21 +1309,15 @@ export class AuthService {
       }
     }
 
-    const newSecret = this.generateResetSecret();
-    const urlToken = this.generateUrlToken();
+    const flowSecret = this.generateFlowSecret();
 
     const { otp } = await this.createVerificationCode(
       user.id,
       VerificationType.PASSWORD_RESET,
       currentAttempts,
       30,
-      urlToken,
+      flowSecret,
     );
-
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { passwordResetSecret: newSecret },
-    });
 
     const { token: verificationToken, expiresAt: verificationTokenExpiresAt } =
       this.signTokenWithExpiry(
@@ -1299,7 +1325,7 @@ export class AuthService {
           sub: user.id,
           email: user.email,
           type: TokenType.PASSWORD_RESET_VERIFICATION,
-          secret: newSecret,
+          flowSecret,
         },
         '30m',
       );
@@ -1307,9 +1333,9 @@ export class AuthService {
     await this.dispatchMail(
       VerificationType.PASSWORD_RESET,
       user.email,
-      user.name,
+      `${user.firstName} ${user.lastName}`,
       otp,
-      urlToken,
+      flowSecret,
     );
 
     const { waitSeconds: nextRetryIn } = this.calcRetryDelay(
@@ -1418,7 +1444,7 @@ export class AuthService {
           sub: fakeUserId,
           email: 'fake@email.com',
           type: TokenType.PASSWORD_RESET_VERIFICATION,
-          secret: 'fake-secret',
+          flowSecret: 'fake-secret',
           isFakeUser: true,
         },
         '30m',
@@ -1566,9 +1592,7 @@ export class AuthService {
       validExpiry = '1d';
     }
 
-    const token = this.jwtService.sign(payload, {
-      expiresIn: validExpiry,
-    });
+    const token = this.jwtService.sign(payload, { expiresIn: validExpiry });
     const decoded = this.jwtService.decode<JwtPayload & { exp?: number }>(
       token,
     );
@@ -1658,7 +1682,7 @@ export class AuthService {
     type: VerificationType,
     attempts: number = 1,
     expiryMinutes: number = 1440,
-    urlToken?: string,
+    flowSecret?: string,
   ): Promise<{ otp: string; hashedOtp: string }> {
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     const hashedOtp = await hash(otp);
@@ -1671,14 +1695,14 @@ export class AuthService {
         userId,
         type,
         code: hashedOtp,
-        urlToken: urlToken ?? null,
+        flowSecret: flowSecret ?? null,
         attempts: validAttempts,
         lastSentAt: new Date(),
         expiresAt,
       },
       update: {
         code: hashedOtp,
-        urlToken: urlToken ?? null,
+        flowSecret: flowSecret ?? null,
         attempts: validAttempts,
         lastSentAt: new Date(),
         expiresAt,
@@ -1704,15 +1728,15 @@ export class AuthService {
     email: string,
     name: string,
     otp: string,
-    urlToken: string,
+    flowSecret: string,
   ): Promise<void> {
     const base = this.config.get<string>('frontend.url');
 
     if (type === VerificationType.EMAIL_VERIFICATION) {
-      const verifyUrl = `${base}/verify-email?token=${urlToken}&code=${otp}`;
+      const verifyUrl = `${base}/verify-email?token=${flowSecret}&code=${otp}`;
       await this.mailService.sendVerificationEmail(email, otp, name, verifyUrl);
     } else {
-      const resetUrl = `${base}/verify-reset?token=${urlToken}&code=${otp}`;
+      const resetUrl = `${base}/verify-reset?token=${flowSecret}&code=${otp}`;
       await this.mailService.sendPasswordResetEmail(email, otp, name, resetUrl);
     }
   }
@@ -1897,13 +1921,8 @@ export class AuthService {
   // PRIVATE — CRYPTO HELPERS
   // ============================================================================
 
-  /** Generates a 64-character hex secret for the password-reset rotation mechanism. */
-  private generateResetSecret(): string {
-    return randomBytes(32).toString('hex');
-  }
-
-  /** Generates a 16-character URL-safe base64 token for email magic links. */
-  private generateUrlToken(): string {
+  /** Generates a URL-safe base64 random secret used as flowSecret. */
+  private generateFlowSecret(): string {
     return randomBytes(12).toString('base64url');
   }
 }

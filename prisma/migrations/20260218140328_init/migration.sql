@@ -4,7 +4,8 @@ CREATE TYPE "VerificationType" AS ENUM ('EMAIL_VERIFICATION', 'PASSWORD_RESET', 
 -- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
+    "firstName" TEXT NOT NULL,
+    "lastName" TEXT NOT NULL,
     "username" TEXT NOT NULL,
     "email" TEXT NOT NULL,
     "pendingEmail" TEXT,
@@ -12,6 +13,9 @@ CREATE TABLE "User" (
     "isEmailVerified" BOOLEAN NOT NULL DEFAULT false,
     "isActive" BOOLEAN NOT NULL DEFAULT true,
     "roleId" TEXT NOT NULL,
+    "enable2FA" BOOLEAN NOT NULL DEFAULT false,
+    "twoFactorSecret" TEXT,
+    "backupCodes" TEXT[],
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -70,17 +74,6 @@ CREATE TABLE "UserPermission" (
 );
 
 -- CreateTable
-CREATE TABLE "UserPreferences" (
-    "id" TEXT NOT NULL,
-    "enable2FA" BOOLEAN NOT NULL DEFAULT false,
-    "emailNotification" BOOLEAN NOT NULL DEFAULT true,
-    "twoFactorSecret" TEXT,
-    "userId" TEXT NOT NULL,
-
-    CONSTRAINT "UserPreferences_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "Session" (
     "id" TEXT NOT NULL,
     "userAgent" TEXT,
@@ -96,6 +89,7 @@ CREATE TABLE "Session" (
 CREATE TABLE "VerificationCode" (
     "id" TEXT NOT NULL,
     "code" TEXT NOT NULL,
+    "flowSecret" TEXT,
     "type" "VerificationType" NOT NULL DEFAULT 'EMAIL_VERIFICATION',
     "userId" TEXT NOT NULL,
     "attempts" INTEGER NOT NULL DEFAULT 0,
@@ -104,21 +98,6 @@ CREATE TABLE "VerificationCode" (
     "expiresAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "VerificationCode_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "RateLimit" (
-    "id" TEXT NOT NULL,
-    "identifier" TEXT NOT NULL,
-    "action" TEXT NOT NULL,
-    "attempts" INTEGER NOT NULL DEFAULT 1,
-    "metadata" JSONB,
-    "windowStart" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "RateLimit_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -188,9 +167,6 @@ CREATE INDEX "UserPermission_userId_granted_idx" ON "UserPermission"("userId", "
 CREATE UNIQUE INDEX "UserPermission_userId_permissionId_key" ON "UserPermission"("userId", "permissionId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "UserPreferences_userId_key" ON "UserPreferences"("userId");
-
--- CreateIndex
 CREATE INDEX "Session_userId_idx" ON "Session"("userId");
 
 -- CreateIndex
@@ -198,6 +174,12 @@ CREATE INDEX "Session_expiredAt_idx" ON "Session"("expiredAt");
 
 -- CreateIndex
 CREATE INDEX "Session_userId_expiredAt_idx" ON "Session"("userId", "expiredAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "VerificationCode_flowSecret_key" ON "VerificationCode"("flowSecret");
+
+-- CreateIndex
+CREATE INDEX "VerificationCode_flowSecret_idx" ON "VerificationCode"("flowSecret");
 
 -- CreateIndex
 CREATE INDEX "VerificationCode_userId_idx" ON "VerificationCode"("userId");
@@ -210,18 +192,6 @@ CREATE INDEX "VerificationCode_userId_type_expiresAt_idx" ON "VerificationCode"(
 
 -- CreateIndex
 CREATE UNIQUE INDEX "VerificationCode_userId_type_key" ON "VerificationCode"("userId", "type");
-
--- CreateIndex
-CREATE INDEX "RateLimit_identifier_action_idx" ON "RateLimit"("identifier", "action");
-
--- CreateIndex
-CREATE INDEX "RateLimit_expiresAt_idx" ON "RateLimit"("expiresAt");
-
--- CreateIndex
-CREATE INDEX "RateLimit_action_createdAt_idx" ON "RateLimit"("action", "createdAt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "RateLimit_identifier_action_key" ON "RateLimit"("identifier", "action");
 
 -- AddForeignKey
 ALTER TABLE "User" ADD CONSTRAINT "User_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "Role"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -237,9 +207,6 @@ ALTER TABLE "UserPermission" ADD CONSTRAINT "UserPermission_userId_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "UserPermission" ADD CONSTRAINT "UserPermission_permissionId_fkey" FOREIGN KEY ("permissionId") REFERENCES "Permission"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "UserPreferences" ADD CONSTRAINT "UserPreferences_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;

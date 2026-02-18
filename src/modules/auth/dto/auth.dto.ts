@@ -92,7 +92,16 @@ export class RegisterDto {
     message: i18nValidationMessage('validation.NOT_EMPTY'),
   })
   @Transform(trim)
-  name: string;
+  firstName: string;
+
+  @Length(2, 100, {
+    message: i18nValidationMessage('validation.LENGTH'),
+  })
+  @IsNotEmpty({
+    message: i18nValidationMessage('validation.NOT_EMPTY'),
+  })
+  @Transform(trim)
+  lastName: string;
 
   @IsOptional()
   @Validate(IsNotReservedUsername, {

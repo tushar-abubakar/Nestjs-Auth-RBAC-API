@@ -11,6 +11,7 @@ import { MailService } from '../mail/mail.service';
 import { TwoFactorService } from '../two-factor/two-factor.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { FlowGuard } from './guards/auth-flow';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
 @Module({
@@ -37,7 +38,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
     JwtStrategy,
     AppCacheService,
     TwoFactorService,
+    FlowGuard,
   ],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, JwtModule, FlowGuard],
 })
 export class AuthModule {}

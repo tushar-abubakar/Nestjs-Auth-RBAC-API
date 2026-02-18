@@ -313,15 +313,13 @@ async function main(): Promise<void> {
     where: { email: 'admin@example.com' },
     update: {},
     create: {
-      name: 'Admin User',
+      firstName: 'Admin',
+      lastName: 'User',
       username: 'admin',
       email: 'admin@example.com',
       password: hashedPassword,
       isEmailVerified: true,
       roleId: adminRole.id,
-      preferences: {
-        create: {},
-      },
     },
   };
 

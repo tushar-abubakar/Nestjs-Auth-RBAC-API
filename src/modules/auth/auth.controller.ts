@@ -2,6 +2,7 @@ import { CurrentUser } from '@/common/decorators/current-user.decorator';
 import { IpAddress } from '@/common/decorators/ip-address.decorator';
 import { Public } from '@/common/decorators/public.decorator';
 import { UserAgent } from '@/common/decorators/user-agent.decorator';
+import { TokenType } from '@/common/types/jwt.type';
 import {
   Body,
   Controller,
@@ -10,7 +11,6 @@ import {
   HttpStatus,
   Post,
   Query,
-  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import {
@@ -23,10 +23,7 @@ import {
   VerifyEmailDto,
   VerifyResetCodeDto,
 } from './dto/auth.dto';
-import { EmailVerificationGuard } from './guards/email-verification.guard';
-import { PasswordResetVerificationGuard } from './guards/password-reset-verification.guard';
-import { PasswordResetGuard } from './guards/password-reset.guard';
-import { TwoFactorGuard } from './guards/two-factor.guard';
+import { Auth } from './guards/auth-flow';
 import {
   AuthResponse,
   EmailResendResponse,
@@ -103,8 +100,8 @@ export class AuthController {
    *  • otherwise    → AUTHENTICATED with session tokens
    */
   @Public()
+  @Auth(TokenType.EMAIL_VERIFICATION)
   @Post('email/verify-otp')
-  @UseGuards(EmailVerificationGuard)
   @HttpCode(HttpStatus.OK)
   verifyEmailOtp(
     @Body() dto: VerifyEmailDto,
@@ -155,8 +152,8 @@ export class AuthController {
    * plus exponential back-off between sends.
    */
   @Public()
+  @Auth(TokenType.EMAIL_VERIFICATION)
   @Post('email/resend-otp')
-  @UseGuards(EmailVerificationGuard)
   @HttpCode(HttpStatus.OK)
   resendEmailVerificationOtp(
     @CurrentUser('id') userId: string,
@@ -199,8 +196,8 @@ export class AuthController {
    * on success, returns AUTHENTICATED session tokens.
    */
   @Public()
+  @Auth(TokenType.TWO_FACTOR)
   @Post('two-factor/verify')
-  @UseGuards(TwoFactorGuard)
   @HttpCode(HttpStatus.OK)
   completeTwoFactorLogin(
     @Body() dto: Verify2FADto,
@@ -281,8 +278,8 @@ export class AuthController {
    * request.  Fake-user flows are silently simulated with realistic delays.
    */
   @Public()
+  @Auth(TokenType.PASSWORD_RESET_VERIFICATION)
   @Post('password/resend-otp')
-  @UseGuards(PasswordResetVerificationGuard)
   @HttpCode(HttpStatus.OK)
   resendPasswordResetOtp(
     @CurrentUser('id') userId: string,
@@ -311,19 +308,19 @@ export class AuthController {
    * rotated so this token cannot be reused.
    */
   @Public()
+  @Auth(TokenType.PASSWORD_RESET_VERIFICATION)
   @Post('password/verify-otp')
-  @UseGuards(PasswordResetVerificationGuard)
   @HttpCode(HttpStatus.OK)
   verifyPasswordResetOtp(
     @Body() dto: VerifyResetCodeDto,
     @CurrentUser('id') userId: string,
-    @CurrentUser('secret') secret: string,
+    @CurrentUser('flowSecret') flowSecret: string,
     @CurrentUser('isFakeUser') isFakeUser: boolean,
   ): Promise<VerifyResetResponse> {
     return this.authService.verifyPasswordResetOtp(
       dto,
       userId,
-      secret,
+      flowSecret,
       isFakeUser,
     );
   }
@@ -368,20 +365,20 @@ export class AuthController {
    * devices after a password change.
    */
   @Public()
+  @Auth(TokenType.PASSWORD_RESET)
   @Post('password/reset')
-  @UseGuards(PasswordResetGuard)
   @HttpCode(HttpStatus.OK)
   resetPassword(
     @Body() dto: SetNewPasswordDto,
     @CurrentUser('id') userId: string,
-    @CurrentUser('secret') secret: string,
+    @CurrentUser('flowSecret') flowSecret: string,
     @UserAgent() userAgent: string,
     @IpAddress() ipAddress: string,
   ): Promise<AuthResponse> {
     return this.authService.resetPassword(
       dto,
       userId,
-      secret,
+      flowSecret,
       userAgent,
       ipAddress,
     );

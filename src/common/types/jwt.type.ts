@@ -12,6 +12,19 @@ export enum TokenType {
 }
 
 /**
+ * Privilege level for each token type (higher = more access).
+ * Used by FlowGuard to allow superior tokens to bypass lower-privilege gates.
+ */
+export const TOKEN_PRIVILEGE: Record<TokenType, number> = {
+  [TokenType.ACCESS]: 100,
+  [TokenType.REFRESH]: 50,
+  [TokenType.TWO_FACTOR]: 30,
+  [TokenType.PASSWORD_RESET]: 20,
+  [TokenType.PASSWORD_RESET_VERIFICATION]: 10,
+  [TokenType.EMAIL_VERIFICATION]: 5,
+};
+
+/**
  * JWT Payload Interface
  * Contains all possible fields used across different token types
  */
@@ -23,7 +36,7 @@ export interface JwtPayload {
   iat?: number;
 
   // For password reset tokens
-  secret?: string;
+  flowSecret?: string;
   isFakeUser?: boolean;
 
   // For auth tokens
@@ -38,13 +51,14 @@ export interface JwtPayload {
 export interface AuthUser {
   id: string;
   email: string;
-  sessionId?: string;
-  name?: string;
   username?: string;
+  firstName?: string;
+  lastName?: string;
+  sessionId?: string;
   roleId?: string;
   roleCode?: string;
   permissions?: string[];
   remember?: boolean;
-  secret?: string;
+  flowSecret?: string;
   isFakeUser?: boolean;
 }

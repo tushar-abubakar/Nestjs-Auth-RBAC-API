@@ -14,7 +14,7 @@ import {
   Post,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { UserPreferences } from 'generated/prisma/client';
+import { User } from 'generated/prisma/client';
 import { I18nService } from 'nestjs-i18n';
 import {
   Disable2FADto,
@@ -38,12 +38,9 @@ export class TwoFactorController {
   async setup(
     @CurrentUser('id') userId: string,
   ): Promise<{ message: string; secret: string; qrCode: string }> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      include: { preferences: true },
-    });
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
 
-    if (user?.preferences?.enable2FA) {
+    if (user?.enable2FA) {
       throw new BadRequestException(
         this.i18n.translate('auth.errors.twoFactorAlreadyEnabled'),
       );
@@ -54,10 +51,12 @@ export class TwoFactorController {
     );
     const qrCode = await this.twoFactorService.generateQrCode(otpauth);
 
-    await this.prisma.userPreferences.upsert({
-      where: { userId },
-      create: { userId, twoFactorSecret: secret, enable2FA: false },
-      update: { twoFactorSecret: secret },
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        twoFactorSecret: secret,
+        enable2FA: false,
+      },
     });
 
     return {
@@ -88,8 +87,8 @@ export class TwoFactorController {
     const { plainCodes, hashedCodes } =
       await this.twoFactorService.generateBackupCodes(backupCodesCount);
 
-    await this.prisma.userPreferences.update({
-      where: { userId },
+    await this.prisma.user.update({
+      where: { id: userId },
       data: { enable2FA: true, backupCodes: hashedCodes },
     });
 
@@ -116,8 +115,8 @@ export class TwoFactorController {
       requireSecret: true,
     });
 
-    await this.prisma.userPreferences.update({
-      where: { userId },
+    await this.prisma.user.update({
+      where: { id: userId },
       data: { enable2FA: false, twoFactorSecret: null, backupCodes: [] },
     });
 
@@ -143,8 +142,8 @@ export class TwoFactorController {
         AUTH_CONSTANTS.BACKUP_CODES_COUNT,
       );
 
-    await this.prisma.userPreferences.update({
-      where: { userId },
+    await this.prisma.user.update({
+      where: { id: userId },
       data: { backupCodes: hashedCodes },
     });
 
@@ -161,8 +160,8 @@ export class TwoFactorController {
   async getBackupCodesCount(
     @CurrentUser('id') userId: string,
   ): Promise<{ count: number }> {
-    const preferences = await this.prisma.userPreferences.findUnique({
-      where: { userId },
+    const preferences = await this.prisma.user.findUnique({
+      where: { id: userId },
       select: { backupCodes: true },
     });
 
@@ -174,8 +173,8 @@ export class TwoFactorController {
   async getStatus(
     @CurrentUser('id') userId: string,
   ): Promise<{ enabled: boolean; backupCodesCount: number }> {
-    const preferences = await this.prisma.userPreferences.findUnique({
-      where: { userId },
+    const preferences = await this.prisma.user.findUnique({
+      where: { id: userId },
       select: { enable2FA: true, backupCodes: true },
     });
 
@@ -211,7 +210,7 @@ export class TwoFactorController {
     userId: string,
     code: string,
     options: { mustBeEnabled: boolean; requireSecret: boolean },
-  ): Promise<UserPreferences> {
+  ): Promise<User> {
     const attempts =
       (await this.cache.get<number>(CACHE_KEYS.TWO_FACTOR_ATTEMPTS(userId))) ??
       0;
@@ -222,8 +221,8 @@ export class TwoFactorController {
       );
     }
 
-    const preferences = await this.prisma.userPreferences.findUnique({
-      where: { userId },
+    const preferences = await this.prisma.user.findUnique({
+      where: { id: userId },
     });
 
     if (

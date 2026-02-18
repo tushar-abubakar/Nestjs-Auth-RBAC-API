@@ -17,23 +17,27 @@ enum VerificationType {
 }
 
 model User {
-  id                  String             @id @default(uuid())
-  name                String
-  username            String             @unique
-  email               String             @unique
-  pendingEmail        String?
-  password            String
-  isEmailVerified     Boolean            @default(false)
-  isActive            Boolean            @default(true)
-  roleId              String
-  role                Role               @relation(fields: [roleId], references: [id])
-  preferences         UserPreferences?
-  sessions            Session[]
-  verificationCodes   VerificationCode[]
-  userPermissions     UserPermission[]
-  passwordResetSecret String?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  id              String  @id @default(uuid())
+  firstName       String
+  lastName        String
+  username        String  @unique
+  email           String  @unique
+  pendingEmail    String?
+  password        String
+  isEmailVerified Boolean @default(false)
+  isActive        Boolean @default(true)
+  roleId          String
+  role            Role    @relation(fields: [roleId], references: [id])
+
+  enable2FA       Boolean  @default(false)
+  twoFactorSecret String?
+  backupCodes     String[]
+
+  sessions          Session[]
+  verificationCodes VerificationCode[]
+  userPermissions   UserPermission[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@index([roleId])
   @@index([email])
@@ -104,16 +108,6 @@ model UserPermission {
   @@index([userId, granted])
 }
 
-model UserPreferences {
-  id                String   @id @default(uuid())
-  enable2FA         Boolean  @default(false)
-  emailNotification Boolean  @default(true)
-  twoFactorSecret   String?
-  backupCodes       String[]
-  userId            String   @unique
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
 model Session {
   id        String   @id @default(uuid())
   userAgent String?
@@ -131,7 +125,7 @@ model Session {
 model VerificationCode {
   id         String           @id @default(uuid())
   code       String
-  urlToken   String?          @unique
+  flowSecret String?          @unique
   type       VerificationType @default(EMAIL_VERIFICATION)
   userId     String
   user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -141,7 +135,7 @@ model VerificationCode {
   expiresAt  DateTime
 
   @@unique([userId, type])
-  @@index([urlToken])
+  @@index([flowSecret])
   @@index([userId])
   @@index([expiresAt])
   @@index([userId, type, expiresAt])

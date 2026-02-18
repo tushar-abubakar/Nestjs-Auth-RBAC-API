@@ -28,7 +28,7 @@ export default (): AppConfig => ({
 
   // ─── JWT ───────────────────────────────────────────────────────────────────
   jwt: {
-    secret: process.env.JWT_SECRET ?? 'change-me-in-production',
+    secret: process.env.JWT_SECRET ?? 'my-jwt-secret',
 
     // Regular session access token (short-lived)
     expiresIn: process.env.JWT_EXPIRES_IN ?? '15m',

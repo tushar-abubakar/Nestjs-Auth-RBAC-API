@@ -17,9 +17,7 @@ import configuration from './config/configuration';
 import { AuthModule } from './modules/auth/auth.module';
 import { AuthService } from './modules/auth/auth.service';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
-import { PermissionsGuard } from './modules/auth/guards/permissions.guard';
 import { RolesGuard } from './modules/auth/guards/roles.guard';
-import { StepUpGuard } from './modules/auth/guards/step-up.guard';
 import { MailModule } from './modules/mail/mail.module';
 import { MailService } from './modules/mail/mail.service';
 import { PermissionModule } from './modules/permission/permission.module';
@@ -90,14 +88,6 @@ import { PrismaService } from './prisma/prisma.service';
     {
       provide: APP_GUARD,
       useClass: RolesGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: PermissionsGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: StepUpGuard,
     },
   ],
 })

@@ -11,9 +11,9 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
   constructor(
     private readonly i18n: I18nService,
-    private configService: ConfigService,
     private permissionService: PermissionService,
     private prisma: PrismaService,
+    configService: ConfigService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -26,7 +26,7 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     // Only allow ACCESS tokens for regular authentication
     if (payload.type !== TokenType.ACCESS) {
       throw new UnauthorizedException(
-        this.i18n.translate('auth.INVALID_TOKEN_TYPE'),
+        this.i18n.translate('auth.invalid_token_type'),
       );
     }
 
@@ -37,7 +37,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
     });
 
     if (!user) {
-      throw new UnauthorizedException('auth.user_not_found_or_inactive');
+      throw new UnauthorizedException(
+        this.i18n.translate('auth.user_not_found_or_inactive'),
+      );
     }
 
     // Verify session if sessionId is present
@@ -47,7 +49,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       });
 
       if (!session || session.expiredAt < new Date()) {
-        throw new UnauthorizedException('auth.session_expired_or_invalid');
+        throw new UnauthorizedException(
+          this.i18n.translate('auth.session_expired_or_invalid'),
+        );
       }
     }
 
@@ -58,8 +62,9 @@ export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
       id: payload.sub,
       sessionId: payload.sessionId,
       email: user.email,
-      name: user.name,
       username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
       roleCode: user.role.code,
       permissions,
     };
