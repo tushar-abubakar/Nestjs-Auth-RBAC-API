@@ -1,6 +1,7 @@
 import { ValidationError, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
+import cookieParser from 'cookie-parser';
 import { I18nValidationExceptionFilter, I18nValidationPipe } from 'nestjs-i18n';
 import { AppModule } from './app.module';
 import { validationExceptionFactory } from './common/exceptions/validation.exception';
@@ -62,8 +63,14 @@ async function bootstrap() {
     isProd ? ['error', 'warn'] : ['error', 'warn', 'log', 'debug', 'verbose'],
   );
 
+  // Enable Cookie Parser
+  app.use(cookieParser());
+
   // CORS
-  //app.enableCors();
+  app.enableCors({
+    origin: ['http://localhost:3001', 'https://localhost:3001'],
+    credentials: true,
+  });
 
   const port = configService.get<number>('app.port', 3000);
   await app.listen(port);
